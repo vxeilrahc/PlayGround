@@ -96,7 +96,7 @@ export function fusionAuthFailure(model, error) {
 
 // Ask the server for a shared lease after the account token is rejected, then restart
 // the OpenCode server so the Fusion plugin picks up the new credentials and upstream.
-export async function switchToSharedFusion(env = process.env, { request = fetch, restart = null } = {}) {
+export async function switchToSharedFusion(env = process.env, { request = fetch, restart = null, binary = '' } = {}) {
   const origin = String(env.OMGITHUB_ORIGIN || 'https://omgithub.com').replace(/\/+$/, '')
   const repository = String(env.GITHUB_REPOSITORY || ''), issue = String(env.TRIGGER_ISSUE_NUMBER || '')
   const run = String(env.GITHUB_RUN_ID || ''), attempt = Number(env.GITHUB_RUN_ATTEMPT || 1)
@@ -115,6 +115,7 @@ export async function switchToSharedFusion(env = process.env, { request = fetch,
   env.FUSION_UPSTREAM = lease.upstream
   env.FUSION_ROUTE = 'shared'
   if (env.GITHUB_ENV) appendFileSync(env.GITHUB_ENV, 'FUSION_ROUTE=shared\n')
+  if (binary) env.OPENCODE_BIN = binary
   const doRestart = restart || (() => {
     let proxy = ''
     try { proxy = readFileSync(join(env.OPENCODE_WEB_DIR, 'opencode-proxy'), 'utf8').trim() } catch {}
@@ -312,7 +313,7 @@ export async function runModels({ binary, port, promptFile, logFile, exitFile, s
       if (code !== 0 && !interrupted && !fusionSwitched && env.FUSION_ROUTE === 'own' && fusionAuthFailure(model, failure)) {
         fusionSwitched = true
         appendFileSync(logFile, '[model-fallback] Copilot rejected the account token; switching to shared Fusion capacity.\n')
-        const ok = await switchToSharedFusion(env).catch(() => false)
+        const ok = await switchToSharedFusion(env, { binary }).catch(() => false)
         attempts.at(-1).fusion_switch = ok ? 'shared' : 'failed'
         writeFileSync(join(directory, 'model-attempts.json'), JSON.stringify(attempts))
         if (ok) { appendFileSync(logFile, '[model-fallback] Shared Fusion ready; retrying ' + model + '.\n'); index--; continue }
